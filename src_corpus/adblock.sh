@@ -15,52 +15,46 @@ function adBlock() {
         # Find different and same domains in ‘domainNames.txt’ and ‘domainsNames2.txt’ files 
 	# and write them in “IPAddressesDifferent.txt and IPAddressesSame.txt" respectively
         # Write your code here...
-        # ...
-        # ...
-        true
+        sort domainNames.txt domainNames2.txt | uniq -d > IPAddressesSame.txt
+        sort domainNames.txt domainNames2.txt | uniq -u > IPAddressesDifferent.txt
             
     elif [ "$1" = "-ipssame"  ]; then
         # Configure the DROP adblock rule based on the IP addresses of $IPAddressesSame file.
-        # Write your code here...
-        # ...
-        # ...
-        true
+        while read ip; do iptables -A INPUT -s $ip -j DROP; done < IPAddressesSame.txt
     elif [ "$1" = "-ipsdiff"  ]; then
         # Configure the REJECT adblock rule based on the IP addresses of $IPAddressesDifferent file.
-        # Write your code here...
-        # ...
-        # ...
-        true
+        while read ip; do iptables -A INPUT -s $ip -j REJECT; done < IPAddressesDifferent.txt
         
     elif [ "$1" = "-save"  ]; then
         # Save rules to $adblockRules file.
-        # Write your code here...
-        # ...
-        # ...
-        true
+        sudo iptables-save > adblockRules
         
     elif [ "$1" = "-load"  ]; then
         # Load rules from $adblockRules file.
-        # Write your code here...
-        # ...
-        # ...
-        true
+        sudo iptables-restore < adblockRules
 
         
     elif [ "$1" = "-reset"  ]; then
         # Reset rules to default settings (i.e. accept all).
-        # Write your code here...
-        # ...
-        # ...
-        true
+        echo "This will reset the iptables rules to the default settings (i.e. accept all)."
+        echo "Are you sure you want to continue? [y/N]"
+        read -r response
+        if [[ "$response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
+        iptables -P INPUT ACCEPT
+        iptables -P OUTPUT ACCEPT
+        iptables -P FORWARD ACCEPT
+
+        iptables -F
+        iptables -X
+    else
+        echo "Aborting."
+    fi
+
 
         
     elif [ "$1" = "-list"  ]; then
         # List current rules.
-        # Write your code here...
-        # ...
-        # ...
-        true
+        sudo iptables -L -n -v
         
     elif [ "$1" = "-help"  ]; then
         printf "This script is responsible for creating a simple adblock mechanism. It rejects connections from specific domain names or IP addresses using iptables.\n\n"
