@@ -13,7 +13,7 @@ function adBlock() {
     fi
     if [ "$1" = "-domains"  ]; then
         # Find different and same domains in ‘domainNames.txt’ and ‘domainsNames2.txt’ files 
-	# and write them in “IPAddressesDifferent.txt and IPAddressesSame.txt" respectively
+	    # and write them in “IPAddressesDifferent.txt and IPAddressesSame.txt" respectively
         # Write your code here...
         sort domainNames.txt domainNames2.txt | uniq -d > IPAddressesSame.txt
         sort domainNames.txt domainNames2.txt | uniq -u > IPAddressesDifferent.txt
@@ -25,11 +25,20 @@ function adBlock() {
         if [[ "$domain" != *"."* ]]; then
             continue
         fi
-        # Perform DNS lookup on domain and extract the IP addresses
-        #ips=$(dig +short $domain) #There was some problem with dig, nslookup worked fine.
-        ips=$(nslookup $domain | awk '/^Address: / {print $2}')
-        # Skip domain if it does not have an IP address
-        if [ -z "$ips" ]; then
+        # Add domain to a temporary file
+        echo "$domain" >> domain_list.txt
+        done < IPAddressesSame.txt
+
+        # Use parallel to perform DNS lookups in parallel
+        cat domain_list.txt | parallel --jobs 8 "ips=$(nslookup {} | awk '/^Address: / {print $2}'); echo $ips {} >> ips_domains.txt"
+
+        # Clean up the temporary file
+        rm domain_list.txt
+
+        # Add DROP rule to iptables for each IP address
+        while read ips domain; do
+        # Skip line if it does not contain an IP address
+        if [ -z "$ips" ] || [ $? -ne 0 ]; then
             continue
         fi
         # Split the IP addresses into an array
@@ -38,7 +47,10 @@ function adBlock() {
         for ip in "${ip_array[@]}"; do
             iptables -A INPUT -s $ip -j DROP
         done
-        done < IPAddressesSame.txt
+        done < ips_domains.txt
+
+        # Clean up the temporary file
+        rm ips_domains.txt
 
     elif [ "$1" = "-ipsdiff"  ]; then
         # Configure the REJECT adblock rule based on the IP addresses of $IPAddressesDifferent file.
@@ -47,11 +59,20 @@ function adBlock() {
         if [[ "$domain" != *"."* ]]; then
             continue
         fi
-        # Perform DNS lookup on domain and extract the IP addresses
-        #ips=$(dig +short $domain)
-        ips=$(nslookup $domain | awk '/^Address: / {print $2}')
-        # Skip domain if it does not have an IP address
-        if [ -z "$ips" ]; then
+        # Add domain to a temporary file
+        echo "$domain" >> domain_list.txt
+        done < IPAddressesDifferent.txt
+
+        # Use parallel to perform DNS lookups in parallel
+        cat domain_list.txt | parallel --jobs 8 "ips=$(nslookup {} | awk '/^Address: / {print $2}'); echo $ips {} >> ips_domains.txt"
+
+        # Clean up the temporary file
+        rm domain_list.txt
+
+        # Add REJECT rule to iptables for each IP address
+        while read ips domain; do
+        # Skip line if it does not contain an IP address
+        if [ -z "$ips" ] || [ $? -ne 0 ]; then
             continue
         fi
         # Split the IP addresses into an array
@@ -60,7 +81,10 @@ function adBlock() {
         for ip in "${ip_array[@]}"; do
             iptables -A INPUT -s $ip -j REJECT
         done
-        done < IPAddressesDifferent.txt
+        done < ips_domains.txt
+
+        # Clean up the temporary file
+        rm ips_domains.txt
 
     elif [ "$1" = "-save"  ]; then
         # Save rules to $adblockRules file.
