@@ -14,77 +14,53 @@ function adBlock() {
     if [ "$1" = "-domains"  ]; then
         # Find different and same domains in ‘domainNames.txt’ and ‘domainsNames2.txt’ files 
 	    # and write them in “IPAddressesDifferent.txt and IPAddressesSame.txt" respectively
-        # Write your code here...
-        sort domainNames.txt domainNames2.txt | uniq -d > IPAddressesSame.txt
-        sort domainNames.txt domainNames2.txt | uniq -u > IPAddressesDifferent.txt
-            
+
+    # Create the output files
+    same_domains=$(mktemp)
+    different_domains=$(mktemp)
+
+    # Sort the input files
+    sort -o domainNames.txt  domainNames.txt
+    sort -o domainNames2.txt  domainNames2.txt
+
+    # Find the domains that are the same in both input files
+    comm -12 domainNames.txt domainNames2.txt > "$same_domains"
+
+    # Find the domains that are different in both input files
+    comm -23 domainNames.txt domainNames2.txt > "$different_domains"
+
+
+    # Get the IP addresses for the same domains and write them to a file
+    cat "$same_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
+    echo "$ip" >> IPAddressesSame.txt
+    done
+
+    # Get the IP addresses for the different domains and write them to a file
+    cat "$different_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
+    echo "$ip" >> IPAddressesDifferent.txt
+    done
+
+    # Remove the temporary files
+    rm "$same_domains" "$different_domains"
+
     elif [ "$1" = "-ipssame"  ]; then
         # Configure the DROP adblock rule based on the IP addresses of $IPAddressesSame file.
-        while read domain; do
-        # Skip line if it does not contain a domain name
-        if [[ "$domain" != *"."* ]]; then
-            continue
-        fi
-        # Add domain to a temporary file
-        echo "$domain" >> domain_list.txt
-        done < IPAddressesSame.txt
-
-        # Use parallel to perform DNS lookups in parallel
-        cat domain_list.txt | parallel --jobs 8 "ips=$(nslookup {} | awk '/^Address: / {print $2}'); echo $ips {} >> ips_domains.txt"
-
-        # Clean up the temporary file
-        rm domain_list.txt
 
         # Add DROP rule to iptables for each IP address
-        while read ips domain; do
-        # Skip line if it does not contain an IP address
-        if [ -z "$ips" ] || [ $? -ne 0 ]; then
-            continue
-        fi
-        # Split the IP addresses into an array
-        IFS=' ' read -ra ip_array <<< "$ips"
-        # Add DROP rule to iptables for each IP address
-        for ip in "${ip_array[@]}"; do
+        while read -r ip; do
             iptables -A INPUT -s $ip -j DROP
-        done
-        done < ips_domains.txt
+            iptables -A FORWARD -s $ip -j DROP
+            iptables -A OUTPUT -d $ip -j DROP
+        done < "$IPAddressesSame"
 
-        # Clean up the temporary file
-        rm ips_domains.txt
 
     elif [ "$1" = "-ipsdiff"  ]; then
         # Configure the REJECT adblock rule based on the IP addresses of $IPAddressesDifferent file.
-        while read domain; do
-        # Skip line if it does not contain a domain name
-        if [[ "$domain" != *"."* ]]; then
-            continue
-        fi
-        # Add domain to a temporary file
-        echo "$domain" >> domain_list.txt
-        done < IPAddressesDifferent.txt
-
-        # Use parallel to perform DNS lookups in parallel
-        cat domain_list.txt | parallel --jobs 8 "ips=$(nslookup {} | awk '/^Address: / {print $2}'); echo $ips {} >> ips_domains.txt"
-
-        # Clean up the temporary file
-        rm domain_list.txt
-
-        # Add REJECT rule to iptables for each IP address
-        while read ips domain; do
-        # Skip line if it does not contain an IP address
-        if [ -z "$ips" ] || [ $? -ne 0 ]; then
-            continue
-        fi
-        # Split the IP addresses into an array
-        IFS=' ' read -ra ip_array <<< "$ips"
-        # Add REJECT rule to iptables for each IP address
-        for ip in "${ip_array[@]}"; do
+        while read -r ip; do
             iptables -A INPUT -s $ip -j REJECT
-        done
-        done < ips_domains.txt
-
-        # Clean up the temporary file
-        rm ips_domains.txt
+            iptables -A FORWARD -s $ip -j REJECT
+            iptables -A OUTPUT -d $ip -j REJECT
+        done < "$IPAddressesDifferent"
 
     elif [ "$1" = "-save"  ]; then
         # Save rules to $adblockRules file.
@@ -110,8 +86,6 @@ function adBlock() {
     else
         echo "Aborting."
     fi
-
-
         
     elif [ "$1" = "-list"  ]; then
         # List current rules.
