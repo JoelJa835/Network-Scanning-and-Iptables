@@ -7,6 +7,16 @@ IPAddressesDifferent="IPAddressesDifferent.txt"
 adblockRules="adblockRules"
 
 function adBlock() {
+
+    if [ -f "$IPAddressesSame" ]; then
+        echo "Removing $IPAddressesSame..."
+        rm "$IPAddressesSame"
+    fi
+    if [ -f "$IPAddressesDifferent" ]; then
+        echo "Removing $IPAddressesDifferent..."
+        rm "$IPAddressesDifferent"
+    fi
+    
     if [ "$EUID" -ne 0 ];then
         printf "Please run as root.\n"
         exit 1
@@ -15,33 +25,36 @@ function adBlock() {
         # Find different and same domains in ‘domainNames.txt’ and ‘domainsNames2.txt’ files 
 	    # and write them in “IPAddressesDifferent.txt and IPAddressesSame.txt" respectively
 
-    # Create the output files
-    same_domains=$(mktemp)
-    different_domains=$(mktemp)
+        echo 'Process of writing in the specified files has started successfully. Please wait patiently the process will be done shortly!!'
+        # Create the output files
+        same_domains=$(mktemp)
+        different_domains=$(mktemp)
 
-    # Sort the input files
-    sort -o domainNames.txt  domainNames.txt
-    sort -o domainNames2.txt  domainNames2.txt
+        # Sort the input files
+        sort -o domainNames.txt  domainNames.txt
+        sort -o domainNames2.txt  domainNames2.txt
 
-    # Find the domains that are the same in both input files
-    comm -12 domainNames.txt domainNames2.txt > "$same_domains"
+        # Find the domains that are the same in both input files
+        comm -12 domainNames.txt domainNames2.txt > "$same_domains"
 
-    # Find the domains that are different in both input files
-    comm -23 domainNames.txt domainNames2.txt > "$different_domains"
+        # Find the domains that are different in both input files
+        comm -23 domainNames.txt domainNames2.txt > "$different_domains"
+        comm -13 domainNames.txt domainNames2.txt >> "$different_domains"
 
 
-    # Get the IP addresses for the same domains and write them to a file
-    cat "$same_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
-    echo "$ip" >> IPAddressesSame.txt
-    done
 
-    # Get the IP addresses for the different domains and write them to a file
-    cat "$different_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
-    echo "$ip" >> IPAddressesDifferent.txt
-    done
+        # Get the IP addresses for the same domains and write them to a file
+        cat "$same_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
+        echo "$ip" >> IPAddressesSame.txt
+        done
 
-    # Remove the temporary files
-    rm "$same_domains" "$different_domains"
+        # Get the IP addresses for the different domains and write them to a file
+        cat "$different_domains" | parallel "nslookup {}" | awk '/^Address: / {print $2}' | grep -v ':' | while read -r ip; do
+        echo "$ip" >> IPAddressesDifferent.txt
+        done
+
+        # Remove the temporary files
+        rm "$same_domains" "$different_domains"
 
     elif [ "$1" = "-ipssame"  ]; then
         # Configure the DROP adblock rule based on the IP addresses of $IPAddressesSame file.
